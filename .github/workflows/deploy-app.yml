@@ -31,8 +31,11 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17' # React Native 0.73+ requires Java 17
-          cache: 'gradle'    # Caches Gradle dependencies to speed up builds
-
+          #cache: 'gradle'    # Caches Gradle dependencies to speed up builds
+      - name: Validate Gradle files
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          cache-disabled: true  
       # 3. Install Dependencies
       - name: Install dependencies
         run: npm ci # 'ci' is faster and safer for pipelines than 'install'
@@ -52,7 +55,7 @@ jobs:
       - name: Build Android APK
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug 
 
       # 7. Upload to Firebase
       - name: Upload Artifact to Firebase App Distribution
