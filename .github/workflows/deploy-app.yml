@@ -38,7 +38,7 @@ jobs:
           cache-disabled: true  
       # 3. Install Dependencies
       - name: Install dependencies
-        run: npm ci # 'ci' is faster and safer for pipelines than 'install'
+        run: npm install # 'ci' is faster and safer for pipelines than 'install'
 
       # 4. Generate Native Code (Crucial Step)
       # This creates the 'android' folder and the 'gradlew' script
