@@ -39,7 +39,7 @@ jobs:
 
      # 3. Install Dependencies
      - name: Install dependencies
-       run: npm ci
+       run: npm install
 
 
      # 4. Generate Native Code (CNG)
