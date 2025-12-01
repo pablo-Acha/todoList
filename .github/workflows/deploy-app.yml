@@ -1,69 +1,93 @@
 name: Deploy Todo App to Firebase
 
+
 on:
-  workflow_dispatch:
-    inputs:
-      release_notes:
-        type: string
-        required: true
-        default: 'Manual Debug Build'
-        description: 'Release Notes'
+ workflow_dispatch:
+   inputs:
+     release_notes:
+       type: string
+       required: true
+       default: 'Manual Debug Build'
+       description: 'Release Notes'
+
 
 jobs:
-  build:
-    name: Build and Distribute
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
+ build:
+   name: Build and Distribute
+   runs-on: ubuntu-latest
+  
+   steps:
+     - name: Checkout source code
+       uses: actions/checkout@v4
 
-      # 1. Setup Node.js (Required for Expo)
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20' # LTS version recommended
-          cache: 'npm'       # or 'yarn' if you use yarn
 
-      # 2. Setup Java (Required for Android build)
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17' # React Native 0.73+ requires Java 17
-          #cache: 'gradle'    # Caches Gradle dependencies to speed up builds
-      - name: Validate Gradle files
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          cache-disabled: true  
-      # 3. Install Dependencies
-      - name: Install dependencies
-        run: npm install # 'ci' is faster and safer for pipelines than 'install'
+     # 1. Setup Node.js
+     - name: Setup Node.js
+       uses: actions/setup-node@v4
+       with:
+         node-version: '20'
+         cache: 'npm'
 
-      # 4. Generate Native Code (Crucial Step)
-      # This creates the 'android' folder and the 'gradlew' script
-      - name: Expo Prebuild
-        run: npx expo prebuild --platform android 
 
-      # 5. Make gradlew executable
-      # We must point to the folder we just created
-      - name: Make gradlew executable
-        run: chmod +x android/gradlew
+     # 2. Setup Java
+     - name: Setup Java
+       uses: actions/setup-java@v4
+       with:
+         distribution: 'temurin'
+         java-version: '17'
 
-      # 6. Build the APK
-      # We explicitly change directory (cd android) to run the build
-      - name: Build Android APK
-        run: |
-          cd android
-          ./gradlew assembleDebug 
 
-      # 7. Upload to Firebase
-      - name: Upload Artifact to Firebase App Distribution
-        uses: wzieba/Firebase-Distribution-Github-Action@v1.7.0
-        with:
-          appId: ${{ secrets.FIREBASE_APP_ID }}
-          serviceCredentialsFileContent: ${{ secrets.CREDENTIAL_FILE_CONTENT }}
-          groups: testers
-          # Note the updated path including 'android/'
-          file: android/app/build/outputs/apk/debug/app-debug.apk
-          releaseNotes: ${{ inputs.release_notes }}
+     # 3. Install Dependencies
+     - name: Install dependencies
+       run: npm ci
+
+
+     # 4. Generate Native Code (CNG)
+     # We do this BEFORE setting up Gradle so the wrapper exists
+     #- name: Expo Prebuild
+     #  run: npx expo prebuild --platform android
+
+
+     # 5. Setup Gradle (The "Magic" Step)
+     # moved AFTER prebuild so it detects the 'android' folder
+     - name: Setup Gradle
+       uses: gradle/actions/setup-gradle@v3
+       with:
+         # Point to the build-root created by Expo
+         build-root-directory: android
+         # This action handles saving/restoring the cache automatically
+         cache-read-only: false
+         # generated-gradle-jars-cache-enabled: true
+
+
+     # 6. Make gradlew executable
+     - name: Make gradlew executable
+       run: chmod +x android/gradlew
+
+
+     # 7. Build the APK
+     # Optimization flags added:
+     # --build-cache: Enables the Gradle build cache
+     # --parallel: Compiles modules in parallel
+     # --configure-on-demand: Only configure relevant projects
+     # -x lint: Skip linting to save time (do linting in a separate PR check)
+     - name: Build Android APK
+       run: |
+         cd android
+         ./gradlew assembleDebug \
+           --build-cache \
+           --parallel \
+           --configure-on-demand \
+           -x lint
+
+
+     # 8. Upload to Firebase
+     - name: Upload Artifact to Firebase App Distribution
+       uses: wzieba/Firebase-Distribution-Github-Action@v1.7.0
+       with:
+         appId: ${{ secrets.FIREBASE_APP_ID }}
+         serviceCredentialsFileContent: ${{ secrets.CREDENTIAL_FILE_CONTENT }}
+         groups: testers
+         file: android/app/build/outputs/apk/debug/app-debug.apk
+         releaseNotes: ${{ inputs.release_notes }}
+         debug: true
